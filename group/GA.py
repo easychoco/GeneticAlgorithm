@@ -1,8 +1,8 @@
 
-from GA import main
+from GA import ga_main
 
 def main():
-  ga = main.GA()
+  ga = ga_main.GA()
   ga.run()
 
 if __name__ == '__main__':
