@@ -76,7 +76,7 @@ ll calc_score(ll me, ll you, const vvl &history)
 // day : 作る日
 // history[i][j] : i と j が過去に同じチームになった回数
 // @return group[i][j][k] = i 日目の j 番目のグループに k の人が含まれる
-vector<vvl> make_group(ll n, ll m, ll day, const vvl &history, const vl &leader_num)
+vvl make_group(ll n, ll m, const vvl &history, const vl &leader_num)
 {
   // できるグループの数
   ll group_num = n / m;
@@ -87,13 +87,14 @@ vector<vvl> make_group(ll n, ll m, ll day, const vvl &history, const vl &leader_
   rep(i2, i1)
   {
     all_pair.push_back(make_tuple(
-        calc_score(i1, i2, history),
-        i1,
-        i2
-      ));
+      calc_score(i1, i2, history),
+      i1,
+      i2
+    ));
   }
 
   // 適応度の小さい順にソートする
+  // ここは dijkstra の気分 (insert がないので priority_queue は不要)
   sort(ALL(all_pair));
 
   // グループ情報を UF で管理する
@@ -107,7 +108,7 @@ vector<vvl> make_group(ll n, ll m, ll day, const vvl &history, const vl &leader_
     }
 
     // 作りたいグループの数だけペアができたら終了
-    if (uf.root_num <= group_num) break;
+    if (uf.root_num <= n - group_num) break;
   }
 
   // 選ばれていなければ true
@@ -133,7 +134,7 @@ vector<vvl> make_group(ll n, ll m, ll day, const vvl &history, const vl &leader_
   }
 
   // グループごとに人を追加する
-  // 選ばれていない人がいなくなるまで
+  // 全員選ばれるまで
   while(count(ALL(is_solo), true) > 0)
   {
     for (auto& group : ret)
@@ -149,8 +150,14 @@ vector<vvl> make_group(ll n, ll m, ll day, const vvl &history, const vl &leader_
           candidate_score.push_back(make_pair(score, candidate));
         }
       }
-      // 一番スコアの低い人をグループに加える
-      ll fixed = min_element(ALL(candidate_score))->second;
+      // 一番スコアの低い人を取得
+      auto min_itr = min_element(ALL(candidate_score));
+
+      // いなければ(全員選ばれれば)終了
+      if (min_itr == candidate_score.end()) break;
+
+      // 内定者をグループに加える
+      ll fixed = min_itr->second;
       group.push_back(fixed);
       is_solo[fixed] = false;
       uf.unite(group[0], fixed);
@@ -167,94 +174,85 @@ vector<vvl> make_group(ll n, ll m, ll day, const vvl &history, const vl &leader_
     iter_swap(leader, group.begin());
   }
 
-  vector<vvl> tmp_ret(day, vvl(group_num, vl(0)));  
-  return tmp_ret;
+  return ret;
 }
 
 // validation
 // 差がないようにグループに振り分けられているか
 // 重複なく振り分けられているか
-void validate(vector<vvl>& group, ll n, ll m, ll day)
+void validate(vvl& group, ll n, ll m)
 {
   // グループの個数
   ll group_num = n / m;
 
   const string err_group_size = "err_group_size";
   const string err_member_duplicate = "err_member_duplicate";
-  rep(today, day)
+  ll min_v = INF;
+  ll max_v = 0;
+  vector<ll> bin(n, 0);
+  rep(i, group_num)
   {
-    ll min_v = INF;
-    ll max_v = 0;
-    vector<ll> bin(n, 0);
-    rep(i, group_num)
+    chmin(min_v, (ll)group[i].size());
+    chmax(max_v, (ll)group[i].size());
+    for (auto v : group[i])
     {
-      chmin(min_v, (ll)group[today][i].size());
-      chmax(max_v, (ll)group[today][i].size());
-      for (auto v : group[today][i])
-      {
-        bin[v]++;
-      }
+      bin[v]++;
     }
-    try
+  }
+  try
+  {
+    if (max_v - min_v > 1)
     {
-      if (max_v - min_v > 1)
-      {
-        show("max:", max_v, "min:", min_v);
-        throw err_group_size;
-      }
-      rep(i, n) if (bin[i] > 1)
-      {
-        show("idx", i, "is", bin[i]);
-        throw err_member_duplicate;
-      }
+      show("max:", max_v, "min:", min_v);
+      throw err_group_size;
     }
-    catch (string err)
+    rep(i, n) if (bin[i] > 1)
     {
-      show("error occured");
-      if (err == err_group_size)
-      {
-        show("グループの人数が不正");
-      }
-      if (err == err_member_duplicate)
-      {
-        show("メンバーが重複");
-      }
-      return;
+      show("idx", i, "is", bin[i]);
+      throw err_member_duplicate;
     }
+  }
+  catch (string err)
+  {
+    show("error occured");
+    if (err == err_group_size)
+    {
+      show("グループの人数が不正");
+    }
+    if (err == err_member_duplicate)
+    {
+      show("メンバーが重複");
+    }
+    return;
   }
 }
 
-void show_group(vector<vvl>& group, ll day)
+void show_group(vvl& group)
 {
-  rep(today, day)
+  for(auto vec : group)
   {
-    cout << today << " : [";
-    for(auto vec : group[today])
-    {
-      cout << " [ ";
-      for (auto v : vec) cout << v << " ";
-      cout << "],";
-    }
-    cout << " ]" << endl;
+    cout << " [ ";
+    for (auto v : vec) cout << v << " ";
+    cout << "],";
   }
+  cout << " ]" << endl;
 }
 
-ll evaluate(vector<vvl>& group, ll day)
+ll evaluate(vvl& group)
 {
   ll n = 0; // 全メンバー数
-  for (auto g : group[0]) n += g.size();
-  ll group_num = group[0].size();
+  for (auto g : group) n += g.size();
+  ll group_num = group.size();
 
   // 評価関数: 日時経過によるメンバー間の重複を評価
   ll duplicate_count = 0;
   vector<ll> check(n, 0LL);
   rep(i, n) check[i] = (1LL << i);
 
-  rep(today, day)
   rep(i, group_num)
   {
-    for (auto now : group[today][i])
-    for (auto pair : group[today][i])
+    for (auto now : group[i])
+    for (auto pair : group[i])
     {
       if (now == pair) continue;
 
@@ -270,11 +268,10 @@ ll evaluate(vector<vvl>& group, ll day)
 
   // 評価関数: リーダーの偏りを評価
   vector<ll> leader_num(n, 0);
-  rep(today, day)
   rep(i, group_num)
   {
-    if (group[today][i].size() == 0) continue;
-    ll leader_idx = group[today][i][0];
+    if (group[i].size() == 0) continue;
+    ll leader_idx = group[i][0];
     leader_num[leader_idx]++;
   }
   auto [min_idx, max_idx] = minmax_element(ALL(leader_num));
@@ -287,8 +284,8 @@ ll evaluate(vector<vvl>& group, ll day)
 void solve()
 {
   // n人 を m人ずつにわける
-  ll n, m, day;
-  cin >> n >> m >> day;
+  ll n, m;
+  cin >> n >> m;
 
   // 過去に同じグループになった回数
   vvl history(n, vl(n, 0));
@@ -297,16 +294,16 @@ void solve()
 
   // グループを作る
   // group[i][j][k] = i 日目の j 番目のグループに k の人が含まれる
-  vector< vvl > group = make_group(n, m, day, history, leader_num);
+  vvl group = make_group(n, m, history, leader_num);
 
   // validation
-  validate(group, n, m, day);
+  validate(group, n, m);
 
   // 答えを出力
-  show_group(group, day);
+  show_group(group);
 
   // 評価関数
-  evaluate(group, day);
+  evaluate(group);
 }
 
 int main()
