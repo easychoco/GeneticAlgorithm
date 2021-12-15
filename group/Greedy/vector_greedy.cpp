@@ -30,39 +30,6 @@ template <class Head, class... Tail>
 void show(Head&& head, Tail&&... tail){ cout << head << " "; show(std::forward<Tail>(tail)...); }
 template<class T> inline void showall(T& a) { for(auto v:a) cout<<v<<" "; cout<<endl; }
 
-class UnionFind{
-public:
-  vector<ll> p;		// 親
-  vector<ll> rank;	// サイズ・各集合の根のみ有効
-  ll root_num; // 連結成分の数
-  UnionFind(ll n) : root_num(n) {
-    p.resize(n, -1);
-    rank.resize(n, 1);
-  }
-  ll root(ll x){
-    if(p[x] == -1) return x;
-    else return p[x] = root(p[x]); // 深さを 1 にしている
-  }
-  bool unite(ll x, ll y){
-    x = root(x); y = root(y);
-    if(x == y) return false;
-    if(rank[x] > rank[y]) swap(x, y); // rankの小さいものを下につける
-    rank[y] += rank[x];
-    p[x] = y;
-    root_num--;
-    return true;
-  }
-  // グループごとに頂点をまとめる: O(N log N)
-  map<ll, vector<ll>> groups(){
-    map<ll, vector<ll>> ret;
-    rep(i, p.size()) ret[root(i)].emplace_back(i);
-    return ret;
-  }
-  //xが属すグループのサイズ
-  ll size(ll x){ return rank[root(x)]; }
-  bool same(ll x, ll y){ return (root(x) == root(y)); }
-};
-
 // 適応度
 // 値が低いほど交流がないことを示す
 ll calc_score(ll me, ll you, const vvl &history)
@@ -97,79 +64,72 @@ vvl make_group(ll n, ll m, const vvl &history, const vl &leader_num)
   // ここは dijkstra の気分 (insert がないので priority_queue は不要)
   sort(ALL(all_pair));
 
-  // グループ情報を UF で管理する
-  UnionFind uf(n);
+  // 選ばれていなければ true
+  vector<bool> is_solo(n, true);
+  vvl all_groups;
   for (auto [_, me, you] : all_pair)
   {
     // どちらも1人ならペアを組む
-    if (uf.size(me) == 1 && uf.size(you) == 1)
+    if (is_solo[me] && is_solo[you])
     {
-      uf.unite(me, you);
+      all_groups.push_back(vl{ me, you });
+      is_solo[me]  = false;
+      is_solo[you] = false;
     }
 
     // 作りたいグループの数だけペアができたら終了
-    if (uf.root_num <= n - group_num) break;
+    if ((ll)all_groups.size() >= group_num) break;
   }
+  all_pair.clear();
 
-  // uf じゃなくても解けるね。
-  // solo を deque につめてやれば shuffle もできていい感じ
-
-  // 選ばれていなければ true
-  vector<bool> is_solo(n, false);
-  vvl ret(group_num);
-  ll group_idx = 0;
-
-  // できたグループごとに
-  for (auto mp : uf.groups())
+  vl solo;
+  // 選ばれていない人を抽出する
+  rep(i, n)
   {
-    auto p = mp.second;
-    // ひとり
-    if (p.size() == 1) is_solo[p[0]] = true;
-    // ペア
-    else if (p.size() == 2)
+    if (is_solo[i])
     {
-      ret[group_idx].push_back(p[0]);
-      ret[group_idx].push_back(p[1]);
-      group_idx++;
+      solo.push_back(i);
     }
-    // それ以外はない
-    else assert(false && "uf.groups().size() is not 1 or 2");
   }
+  is_solo.clear();
+
+  // ランダム性を持たせるために乱数を使う
+  random_device seed_gen;
+  mt19937 rand(seed_gen());
 
   // グループごとに人を追加する
   // 全員選ばれるまで
-  while(count(ALL(is_solo), true) > 0)
+  while(!solo.empty())
   {
-    for (auto& group : ret)
+    for (auto& group : all_groups)
     {
-      // 候補者のスコアを pair<score, idx> で保存する
-      vp candidate_score;
-      rep(candidate, n)
+      // 候補者のスコアを tuple<score, random_value, idx> で保存する
+      // random_value はソート時にランダム性を持たせるため
+      vector<tuple<ll, ll, ll>> candidate_score;
+      rep(i, solo.size())
       {
-        if (is_solo[candidate])
-        {
-          ll score = 0;
-          for(auto me : group) score += calc_score(me, candidate, history);
-          candidate_score.push_back(make_pair(score, candidate));
-        }
+        ll score = 0;
+        for(auto me : group) score += calc_score(me, solo[i], history);
+        candidate_score.push_back(make_tuple(score, rand(), i));
       }
-      // 一番スコアの低い人を取得
+
+      // スコアが一番低いメンバーを取得
       auto min_itr = min_element(ALL(candidate_score));
 
-      // いなければ(全員選ばれれば)終了
+      // いなければ(全員選ばれていれば)終了
       if (min_itr == candidate_score.end()) break;
 
       // 内定者をグループに加える
-      ll fixed = min_itr->second;
-      group.push_back(fixed);
-      is_solo[fixed] = false;
-      uf.unite(group[0], fixed);
+      auto [_score, _random, index] = *min_itr;
+      group.push_back(solo[index]);
+      solo.erase(solo.begin() + index);
     }
   }
+  solo.clear();
 
   // 続いてリーダーを選出する
   // グループの中でリーダーになった回数がいちばん少ない人を先頭にする
-  for (auto& group : ret)
+  for (auto& group : all_groups)
   {
     auto leader = min_element(ALL(group), [&](const auto& a, const auto& b){
       return leader_num[a] < leader_num[b];
@@ -177,7 +137,7 @@ vvl make_group(ll n, ll m, const vvl &history, const vl &leader_num)
     iter_swap(leader, group.begin());
   }
 
-  return ret;
+  return all_groups;
 }
 
 // validation
@@ -232,13 +192,14 @@ void validate(vvl& group, ll n, ll m)
 
 void show_group(vvl& group)
 {
+  cout << "[" << endl;
   for(auto vec : group)
   {
     cout << " [ ";
     for (auto v : vec) cout << v << " ";
-    cout << "],";
+    cout << "]," << endl;
   }
-  cout << " ]" << endl;
+  cout << "]" << endl;
 }
 
 ll evaluate(vector<vvl>& group, ll day)
@@ -286,27 +247,42 @@ ll evaluate(vector<vvl>& group, ll day)
   return duplicate_count + (*max_idx - *min_idx);
 }
 
+// 入力から必要なデータをつくる
 void process_input(ll &n, ll &m, vvl &history, vl &leader_num)
 {
-  ll cnt;
-  cin >> n >> m >> cnt;
+  ll day;
+  cin >> n >> m >> day;
   history.resize(n, vl(n, 0));
   leader_num.resize(n, 0);
 
-  vvl bin(n, vl(m, 0));
+  ll group_num = n / m;
+  vector< vvl > group_history(day, vvl(group_num, vl()));
   rep(i, n)
   {
-    rep(_, cnt)
+    rep(today, day)
     {
       char c;
       cin >> c;
-      if (isdigit(c))
+      if (isdigit(c)) // '-' を除く
       {
-        ll team_idx = c - '0';
-        bin[team_idx].push_back(i);
+        ll group_idx = c - '0';
+        group_history[today][group_idx].push_back(i);
       }
     }
   }
+
+  rep(today, day)
+  {
+    rep(group_idx, group_num)
+    {
+      for (auto  me : group_history[today][group_idx])
+      for (auto you : group_history[today][group_idx])
+      {
+        history[me][you] += 1;
+      }
+    }
+  }
+  // show_group(history);
 }
 
 void solve()
@@ -319,8 +295,6 @@ void solve()
   vl leader_num;
 
   process_input(n, m, history, leader_num);
-
-  vvl history(n, vl(n, 0));
 
   // グループを作る
   // group[i][j][k] = i 日目の j 番目のグループに k の人が含まれる
