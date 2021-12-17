@@ -202,16 +202,16 @@ void show_group(vvl& group)
   cout << "]" << endl;
 }
 
-ll evaluate(vector<vvl>& group, ll day)
+ll evaluate(vector<vvl>& group)
 {
+  ll day = group.size();
   ll n = 0; // 全メンバー数
-  for (auto g : group[0]) n += g.size();
-  ll group_num = group[0].size();
+  for (auto g : group.back()) n += g.size();
+  ll group_num = group.back().size();
 
   // 評価関数: 日時経過によるメンバー間の重複を評価
   ll duplicate_count = 0;
-  vector<ll> check(n, 0LL);
-  rep(i, n) check[i] = (1LL << i);
+  vector< vector<bool> > check(n, vector<bool>(n, false));
 
   rep(today, day)
   rep(i, group_num)
@@ -221,11 +221,11 @@ ll evaluate(vector<vvl>& group, ll day)
     {
       if (now == pair) continue;
 
-      if (check[now] >> pair & 1)
+      if (check[now][pair])
       {
         duplicate_count++;
       }
-      check[now] |= (1LL << pair);
+      check[now][pair] = true;
     }
   }
 
@@ -248,24 +248,24 @@ ll evaluate(vector<vvl>& group, ll day)
 }
 
 // 入力から必要なデータをつくる
-void process_input(ll &n, ll &m, vvl &history, vl &leader_num)
+void process_input(ll &n, ll &m, vector<vvl> &group_history, vvl &history, vl &leader_num)
 {
   ll day;
   cin >> n >> m >> day;
-  history.resize(n, vl(n, 0));
-  leader_num.resize(n, 0);
 
   ll group_num = n / m;
-  vector< vvl > group_history(day, vvl(group_num, vl()));
+  group_history.resize(day, vvl(group_num, vl()));
+  history.resize(n, vl(n, 0));
+  leader_num.resize(n, 0);
   rep(i, n)
   {
     rep(today, day)
     {
-      char c;
-      cin >> c;
-      if (isdigit(c)) // '-' を除く
+      string s;
+      cin >> s;
+      if (s != "-") // '-' を除く
       {
-        ll group_idx = c - '0';
+        ll group_idx = stoi(s) - 1;
         group_history[today][group_idx].push_back(i);
       }
     }
@@ -282,19 +282,19 @@ void process_input(ll &n, ll &m, vvl &history, vl &leader_num)
       }
     }
   }
-  // show_group(history);
 }
 
 void solve()
 {
   // n人 を m人ずつにわける
   ll n, m;
+  vector< vvl > group_history;
   // 過去に同じグループになった回数
   vvl history;
   // これまでにリーダーになった回数
   vl leader_num;
 
-  process_input(n, m, history, leader_num);
+  process_input(n, m, group_history, history, leader_num);
 
   // グループを作る
   // group[i][j][k] = i 日目の j 番目のグループに k の人が含まれる
@@ -303,11 +303,13 @@ void solve()
   // validation
   validate(group, n, m);
 
+  group_history.push_back(group);
+
   // 答えを出力
   show_group(group);
 
   // 評価関数
-  // evaluate(group);
+  evaluate(group_history);
 }
 
 int main()
