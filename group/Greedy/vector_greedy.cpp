@@ -48,13 +48,18 @@ vvl make_group(ll n, ll m, const vvl &history, const vl &leader_num)
   // できるグループの数
   ll group_num = n / m;
 
-  // pair<score, me, you>
-  vector<tuple<ll, ll, ll>> all_pair;
+  // ランダム性を持たせるために乱数を使う
+  random_device seed_gen;
+  mt19937 rand(seed_gen());
+
+  // pair<score, random, me, you>
+  vector<tuple<ll, ll, ll, ll>> all_pair;
   rep(i1, n)
   rep(i2, i1)
   {
     all_pair.push_back(make_tuple(
       calc_score(i1, i2, history),
+      rand(),
       i1,
       i2
     ));
@@ -67,7 +72,7 @@ vvl make_group(ll n, ll m, const vvl &history, const vl &leader_num)
   // 選ばれていなければ true
   vector<bool> is_solo(n, true);
   vvl all_groups;
-  for (auto [_, me, you] : all_pair)
+  for (auto [_score, _rand, me, you] : all_pair)
   {
     // どちらも1人ならペアを組む
     if (is_solo[me] && is_solo[you])
@@ -92,10 +97,6 @@ vvl make_group(ll n, ll m, const vvl &history, const vl &leader_num)
     }
   }
   is_solo.clear();
-
-  // ランダム性を持たせるために乱数を使う
-  random_device seed_gen;
-  mt19937 rand(seed_gen());
 
   // グループごとに人を追加する
   // 全員選ばれるまで
